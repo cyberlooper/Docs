@@ -44,30 +44,29 @@ while (true); do
         exit
     elif [[ ${APT_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPDATE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPGRADE_COUNT_LAST_ELAPSED#0} -ge ${WAIT_TIME} ]]; then
         echo "> It has been more than ${WAIT_TIME} minutes since at least one of the above changed..."
-        echo "> You might want to consider rebooting and running this script again"
+        echo "> You might want to consider rebooting and running this script again."
+        echo "> Press Ctrl+C or Cmd+C to exit this script at any time."
+        echo "> `sudo reboot` can be used to reboot the machine."
     else
         echo "> Keep waiting..."
     fi
-#echo "**** WAIT_TIME=${WAIT_TIME}"
+
     if [[ ${APT_COUNT} != ${APT_COUNT_LAST} ]]; then
         APT_COUNT_LAST=${APT_COUNT}
         APT_COUNT_LAST_ELAPSED=$(($(date +%s)-$start))
         APT_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${APT_COUNT_LAST_ELAPSED} +%M)
-        #echo "**** APT_COUNT_LAST_ELAPSED_MINUTES=${APT_COUNT_LAST_ELAPSED_MINUTES#0}"
     fi
 
     if [[ ${UPDATE_COUNT} != ${UPDATE_COUNT_LAST} ]]; then
         UPDATE_COUNT_LAST=${APT_COUNT}
         UPDATE_COUNT_LAST_ELAPSED=$(($(date +%s)-$start))
         UPDATE_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${UPDATE_COUNT_LAST_ELAPSED} +%M)
-        #echo "**** UPDATE_COUNT_LAST_ELAPSED_MINUTES=${UPDATE_COUNT_LAST_ELAPSED_MINUTES#0}"
     fi
 
     if [[ ${UPGRADE_COUNT} != ${UPGRADE_COUNT_LAST} ]]; then
         UPGRADE_COUNT_LAST=${APT_COUNT}
         UPGRADE_COUNT_LAST_ELAPSED=$(($(date +%s)-$start))
         UPGRADE_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${UPGRADE_COUNT_LAST_ELAPSED} +%M)
-        #echo "**** UPGRADE_COUNT_LAST_ELAPSED_MINUTES=${UPGRADE_COUNT_LAST_ELAPSED_MINUTES#0}"
     fi
 
     sleep 5;
