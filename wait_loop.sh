@@ -46,7 +46,7 @@ while (true); do
         echo "> It has been more than ${WAIT_TIME} minutes since at least one of the above changed..."
         echo "> You might want to consider rebooting and running this script again."
         echo "> Press Ctrl+C or Cmd+C to exit this script at any time."
-        echo "> `sudo reboot` can be used to reboot the machine."
+        echo "> 'sudo reboot' can be used to reboot the machine."
     else
         echo "> Keep waiting..."
     fi
