@@ -13,6 +13,12 @@ WAIT_COMPLETE=0
 DNS_PASS=1
 FAILED=0
 
+exec 1> >(tee -a precheck.log) 2>&1
+TODAY=$(date)
+echo "-----------------------------------------------------"
+echo "Date:          $TODAY"
+echo "-----------------------------------------------------"
+
 echo "Fixing setup page"
 if [[ ! -f "/usr/share/nginx/html/setup/index.php.orig" ]]; then
     sudo cp /usr/share/nginx/html/setup/index.php /usr/share/nginx/html/setup/index.php.orig
@@ -42,6 +48,7 @@ sudo apt-get -y  -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--forc
 
 echo ""
 echo "If any errors appeared above, please screenshot or copy your output and paste it on the Openflixr Discord or Forums"
+echo "You may also access the logs at any time via precheck.log"
 read -p 'Press enter to continue' temp
 
 while (true); do
