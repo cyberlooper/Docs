@@ -37,6 +37,13 @@ fi
 echo "Fixing redis config"
 sudo sed -i "s/bind 127.0.0.1 ::1/bind 127.0.0.1/g" "/etc/redis/redis.conf"
 
+echo "Fixing php"
+sudo apt-get -y  -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install php7.3-fpm
+
+echo ""
+echo "If any errors appeared above, please screenshot or copy your output and paste it on the Openflixr Discord or Forums"
+read -p 'Press enter to continue' temp
+
 while (true); do
     clear
     elapsed=$(($(date +%s)-$start))
