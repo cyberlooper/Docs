@@ -1,3 +1,11 @@
+#!/usr/bin/env bash
+
+readonly DETECTED_PUID=${SUDO_UID:-$UID}
+readonly DETECTED_UNAME=$(id -un "${DETECTED_PUID}" 2> /dev/null || true)
+readonly DETECTED_PGID=$(id -g "${DETECTED_PUID}" 2> /dev/null || true)
+readonly DETECTED_UGROUP=$(id -gn "${DETECTED_PUID}" 2> /dev/null || true)
+readonly DETECTED_HOMEDIR=$(eval echo "~${DETECTED_UNAME}" 2> /dev/null || true)
+
 start=$(date +%s)
 start_display=$(date)
 duration=""
@@ -9,47 +17,42 @@ UPDATE_COUNT_LAST_ELAPSED_MINUTES=0
 UPGRADE_COUNT_LAST=0
 UPGRADE_COUNT_LAST_ELAPSED_MINUTES=0
 WAIT_TIME=5
+WAIT_UPTIME=10
 WAIT_COMPLETE=0
 DNS_PASS=1
 FAILED=0
 
 exec 1> >(tee -a precheck.log) 2>&1
+
+if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
+    echo "Running as root is not supported. Please run as a standard user with sudo."
+    exit 1
+fi
+if [[ ${EUID} -ne 0 ]]; then
+    exec sudo bash precheck.sh
+fi
+
 TODAY=$(date)
 echo "-----------------------------------------------------"
 echo "Date:          $TODAY"
 echo "-----------------------------------------------------"
 
-echo "Fixing setup page"
-if [[ ! -f "/usr/share/nginx/html/setup/index.php.orig" ]]; then
-    sudo cp /usr/share/nginx/html/setup/index.php /usr/share/nginx/html/setup/index.php.orig
+if [[ ! -f "precheck_nouptime" ]]; then
+    echo ""
+    echo "Waiting for the system to have been running for ${WAIT_UPTIME} minutes"
+    while (true); do
+        UPTIME_HOURS=$(awk '{print int($1/3600)}' /proc/uptime)
+        UPTIME_MINUTES=$(awk '{print int(($1%3600)/60)}' /proc/uptime)
+        UPTIME_SECONDS=$(awk '{print int($1%60)}' /proc/uptime)
+        if [[ ${UPTIME_HOURS} -gt 0 || ${UPTIME_MINUTES} -ge ${WAIT_UPTIME} ]]; then
+            touch precheck_nouptime
+            break
+        else
+            echo -en "\rCurrent Uptime: ${UPTIME_HOURS} hours ${UPTIME_MINUTES} minutes ${UPTIME_SECONDS} seconds"
+        fi
+        sleep 5s
+    done
 fi
-if [[ ! -f "/usr/share/nginx/html/setup/index.php.placeholder" ]]; then
-    echo "If you are seeing this, your system isn't ready..." > index.php.placeholder
-    sudo mv index.php.placeholder /usr/share/nginx/html/setup/index.php.placeholder
-    rm index.php.placeholder
-    sudo mv /usr/share/nginx/html/setup/index.php.placeholder /usr/share/nginx/html/setup/index.php
-else
-    sudo mv /usr/share/nginx/html/setup/index.php.placeholder /usr/share/nginx/html/setup/index.php
-fi
-
-echo "Fixing mono"
-if [[ ! -f "/etc/mono/config.openflixr" ]]; then
-    sudo mv "/etc/mono/config" "/etc/mono/config.openflixr"
-fi
-if [[ -f "/etc/mono/config.dpkg-new" ]]; then
-    sudo cp "/etc/mono/config.dpkg-new" "/etc/mono/config"
-fi
-
-echo "Fixing redis config"
-sudo sed -i "s/bind 127.0.0.1 ::1/bind 127.0.0.1/g" "/etc/redis/redis.conf"
-
-echo "Fixing php"
-sudo apt-get -y  -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install php7.3-fpm
-
-echo ""
-echo "If any errors appeared above, please screenshot or copy your output and paste it on the Openflixr Discord or Forums"
-echo "You may also access the logs at any time via precheck.log"
-read -p 'Press enter to continue' temp
 
 while (true); do
     clear
@@ -97,30 +100,69 @@ while (true); do
 
     if [[ ${APT_COUNT} != ${APT_COUNT_LAST} ]]; then
         APT_COUNT_LAST=${APT_COUNT}
-        APT_COUNT_LAST_ELAPSED=$(($(date +%s)-$start))
+        APT_COUNT_CHANGED=$(date +%s)
     fi
-    if [[ -n ${APT_COUNT_LAST_ELAPSED} ]]; then
+    if [[ ${APT_COUNT_CHANGED:-} != "" ]]; then
+        APT_COUNT_LAST_ELAPSED=$(($(date +%s)-${APT_COUNT_CHANGED}))
         APT_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${APT_COUNT_LAST_ELAPSED} +%M)
     fi
 
     if [[ ${UPDATE_COUNT} != ${UPDATE_COUNT_LAST} ]]; then
-        UPDATE_COUNT_LAST=${APT_COUNT}
-        UPDATE_COUNT_LAST_ELAPSED=$(($(date +%s)-$start))
+        UPDATE_COUNT_LAST=${UPDATE_COUNT}
+        UPDATE_COUNT_CHANGED=$(date +%s)
     fi
-    if [[ -n ${UPDATE_COUNT_LAST_ELAPSED} ]]; then
+    if [[ ${UPDATE_COUNT_CHANGED:-} != "" ]]; then
+        UPDATE_COUNT_LAST_ELAPSED=$(($(date +%s)-${UPDATE_COUNT_CHANGED}))
         UPDATE_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${UPDATE_COUNT_LAST_ELAPSED} +%M)
     fi
 
     if [[ ${UPGRADE_COUNT} != ${UPGRADE_COUNT_LAST} ]]; then
-        UPGRADE_COUNT_LAST=${APT_COUNT}
-        UPGRADE_COUNT_LAST_ELAPSED=$(($(date +%s)-$start))
+        UPGRADE_COUNT_LAST=${UPGRADE_COUNT}
+        UPGRADE_COUNT_CHANGED=$(date +%s)
     fi
-    if [[ -n ${UPDATE_COUNT_LAST_ELAPSED} ]]; then
+    if [[ ${UPGRADE_COUNT_CHANGED:-} != "" ]]; then
+        UPGRADE_COUNT_LAST_ELAPSED=$(($(date +%s)-${UPGRADE_COUNT_CHANGED}))
         UPGRADE_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${UPGRADE_COUNT_LAST_ELAPSED} +%M)
     fi
 
     sleep 5;
 done
+
+echo ""
+echo "Putting some fixes in place..."
+echo ""
+echo "Updating setup page"
+if [[ ! -f "/usr/share/nginx/html/setup/index.php.orig" ]]; then
+    cp /usr/share/nginx/html/setup/index.php /usr/share/nginx/html/setup/index.php.orig
+fi
+if [[ ! -f "/usr/share/nginx/html/setup/index.php.placeholder" ]]; then
+    echo "If you are seeing this, your system isn't ready..." > index.php.placeholder
+    mv index.php.placeholder /usr/share/nginx/html/setup/index.php.placeholder
+    mv /usr/share/nginx/html/setup/index.php.placeholder /usr/share/nginx/html/setup/index.php
+else
+    mv /usr/share/nginx/html/setup/index.php.placeholder /usr/share/nginx/html/setup/index.php
+fi
+
+echo ""
+echo "Fixing mono"
+if [[ ! -f "/etc/mono/config.openflixr" ]]; then
+    mv "/etc/mono/config" "/etc/mono/config.openflixr"
+fi
+if [[ -f "/etc/mono/config.dpkg-new" ]]; then
+    cp "/etc/mono/config.dpkg-new" "/etc/mono/config"
+fi
+
+echo ""
+echo "Fixing redis config"
+sed -i "s/bind 127.0.0.1 ::1/bind 127.0.0.1/g" "/etc/redis/redis.conf"
+
+echo ""
+echo "Fixing php"
+export DEBIAN_FRONTEND=noninteractive
+export UCF_FORCE_CONFFNEW=1
+apt-get -y -o Dpkg::Options::=--force-confnew install php7.3-fpm
+export DEBIAN_FRONTEND=
+export UCF_FORCE_CONFFNEW=
 
 echo ""
 echo "Doing some basic DNS checks..."
