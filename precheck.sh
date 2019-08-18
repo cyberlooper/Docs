@@ -5,9 +5,14 @@ readonly DETECTED_UNAME=$(id -un "${DETECTED_PUID}" 2> /dev/null || true)
 readonly DETECTED_PGID=$(id -g "${DETECTED_PUID}" 2> /dev/null || true)
 readonly DETECTED_UGROUP=$(id -gn "${DETECTED_PUID}" 2> /dev/null || true)
 readonly DETECTED_HOMEDIR=$(eval echo "~${DETECTED_UNAME}" 2> /dev/null || true)
+readonly PRECHECK_DIR="${DETECTED_HOMEDIR}/precheck"
 
-if [[ -f "${DETECTED_HOMEDIR}/precheck.config" ]]; then
-    source "${DETECTED_HOMEDIR}/precheck.config"
+if [[ ! -d "${PRECHECK_DIR}" ]]; then
+    mkdir -p "${PRECHECK_DIR}"
+fi
+
+if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
+    source "${PRECHECK_DIR}/precheck.config"
 fi
 
 start=$(date +%s)
@@ -26,24 +31,50 @@ WAIT_COMPLETE=0
 DNS_PASS=1
 FAILED=0
 
+# Colors
+# https://misc.flogisoft.com/bash/tip_colors_and_formatting
+readonly BLU='\e[34m'
+readonly GRN='\e[32m'
+readonly RED='\e[31m'
+readonly YLW='\e[33m'
+readonly NC='\e[0m'
+
+# Log Functions
+readonly LOG_FILE="${PRECHECK_DIR}/precheck.log"
+sudo chown "${DETECTED_PUID:-$DETECTED_UNAME}":"${DETECTED_PGID:-$DETECTED_UGROUP}" "${LOG_FILE}" > /dev/null 2>&1 || true # This line should always use sudo
+log() {
+    if [[ -v DEBUG && $DEBUG == 1 ]] || [[ -v VERBOSE && $VERBOSE == 1 ]] || [[ -v DEVMODE && $DEVMODE == 1 ]]; then
+        echo -e "${NC}$(date +"%F %T") ${BLU}[LOG]${NC}        $*${NC}" | tee -a "${LOG_FILE}";
+    else
+        echo -e "${NC}$(date +"%F %T") ${BLU}[LOG]${NC}        $*${NC}" | tee -a "${LOG_FILE}" > /dev/null;
+    fi
+}
+info() { echo -e "${NC}$(date +"%F %T") ${BLU}[INFO]${NC}       $*${NC}" | tee -a "${LOG_FILE}"; }
+warning() { echo -e "${NC}$(date +"%F %T") ${YLW}[WARNING]${NC}    $*${NC}" | tee -a "${LOG_FILE}"; }
+error() { echo -e "${NC}$(date +"%F %T") ${RED}[ERROR]${NC}      $*${NC}" | tee -a "${LOG_FILE}"; }
 fatal() {
-    echo -e "$*"
+    echo -e "${NC}$(date +"%F %T") ${RED}[FATAL]${NC}      $*${NC}" | tee -a "${LOG_FILE}"
     exit 1
 }
+debug() {
+    if [[ -v DEBUG && $DEBUG == 1 ]] || [[ -v VERBOSE && $VERBOSE == 1 ]] || [[ -v DEVMODE && $DEVMODE == 1 ]]; then
+        echo -e "${NC}$(date +"%F %T") ${GRN}[DEBUG]${NC}      $*${NC}" | tee -a "${LOG_FILE}"
+    fi
+}
 
-exec 1> >(tee -a precheck.log) 2>&1
+exec 2> >(tee -a "${LOG_FILE}")
 
 if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
-    echo "Running as root is not supported. Please run as a standard user with sudo."
+    error "Running as root is not supported. Please run as a standard user with sudo."
     exit 1
 fi
 if [[ ${EUID} -ne 0 ]]; then
-    if [[ ${DEV_MODE:-} == "local" && -f "precheck.sh" ]]; then
+    if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
         exec sudo bash precheck.sh
     else
         if [[ ${DEV_BRANCH:-} == "development" ]]; then
             if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
-                echo "SETUP_BRANCH not set. Defaulting to master"
+                warning "SETUP_BRANCH not set. Defaulting to master"
             fi
             BRANCH="${PRECHECK_BRANCH:-master}"
         else
@@ -53,33 +84,35 @@ if [[ ${EUID} -ne 0 ]]; then
     fi
 fi
 
-clear
-TODAY=$(date)
-echo "-----------------------------------------------------"
-echo "Date:          $TODAY"
-echo "-----------------------------------------------------"
+info " ------ Starting precheck ------"
 
-if [[ ! -f "precheck_nouptime" ]]; then
+if [[ ! -f "${PRECHECK_DIR}/precheck_nouptime" ]]; then
     echo ""
-    echo "Waiting for the system to have been running for ${WAIT_UPTIME} minutes"
+    info "Waiting for the system to have been running for ${WAIT_UPTIME} minutes"
     while (true); do
         UPTIME_HOURS=$(awk '{print int($1/3600)}' /proc/uptime)
         UPTIME_MINUTES=$(awk '{print int(($1%3600)/60)}' /proc/uptime)
         UPTIME_SECONDS=$(awk '{print int($1%60)}' /proc/uptime)
         if [[ ${UPTIME_HOURS} -gt 0 || ${UPTIME_MINUTES} -ge ${WAIT_UPTIME} ]]; then
-            touch precheck_nouptime
+            touch "${PRECHECK_DIR}/precheck_nouptime"
+            info "- Wait complete!"
             break
         else
             echo -en "\rCurrent Uptime: ${UPTIME_HOURS} hours ${UPTIME_MINUTES} minutes ${UPTIME_SECONDS} seconds    "
         fi
         sleep 5s
     done
+else
+    log "System uptime check already completed!"
 fi
 
+info "Waiting for the system to finish some processes..."
 while (true); do
     clear
     elapsed=$(($(date +%s)-$start))
     duration=$(date -ud @$elapsed +'%M minutes %S seconds')
+    echo ""
+    echo "Waiting for the system to finish some processes..."
     echo "Started: ${start_display}"
     echo "Now:     $(date)"
     echo "Elapsed: ${duration}"
@@ -109,20 +142,22 @@ while (true); do
 
     if [[ ${APT_COUNT} = 0 && ${UPDATE_COUNT} = 0 && ${UPGRADE_COUNT} = 0 ]]; then
         WAIT_COMPLETE=1
-        echo "> Completed!"
+        info "- Completed!"
+        log "  Elapsed: ${duration}"
         sed -i 's#echo "Running precheck script"##g' ".bashrc"
         sed -i 's#bash precheck.sh##g' ".bashrc"
         sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"##g' ".bashrc"
         break
     elif [[ ${APT_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPDATE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPGRADE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} ]]; then
         echo "> It has been more than ${WAIT_TIME} minutes since at least one of the above changed..."
-        echo "> You might want to consider rebooting."
+        echo "> You might want to consider rebooting but you can wait, it just might take a while."
         echo "> Press Ctrl+C or Cmd+C to exit this script at any time."
         echo "> 'sudo reboot' can be used to reboot the machine and this script will run again automatically when you log in again."
         if [[ $(grep -c "precheck.sh" ".bashrc") == 0 ]]; then
+            log "- Adding precheck script to .bashrc"
             echo "" >> .bashrc
             echo 'echo "Running precheck script"' >> .bashrc
-            if [[ -f "precheck.sh" ]]; then
+            if [[ -f "$precheck.sh" ]]; then
                 echo 'bash precheck.sh' >> .bashrc
             else
                 if [[ ${DEV_BRANCH:-} == "development" ]]; then
@@ -177,29 +212,29 @@ while (true); do
 done
 
 echo ""
-echo "Putting some fixes in place..."
-echo "These fixes can be run again later using 'setupopenflixr'"
+info "Putting some fixes in place..."
+info "These fixes can be run again later using 'setupopenflixr'"
 echo ""
-echo "Getting latest for 'setupopenflixr'"
+info "- Getting latest for 'setupopenflixr'"
 if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
     cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
     if [[ ${DEV_BRANCH:-} == "development" ]]; then
         if [[ ${SETUP_BRANCH:-} == "" ]]; then
-            echo "SETUP_BRANCH not set. Defaulting to origin/master"
+            info "  - SETUP_BRANCH not set. Defaulting to origin/master"
         fi
         BRANCH="${SETUP_BRANCH:-origin/master}"
     else
         BRANCH="origin/master"
     fi
-    echo "Fetching recent changes from git."
+    info "  Fetching recent changes from git."
     git fetch > /dev/null 2>&1 || fatal "Failed to fetch recent changes from git."
     GH_COMMIT=$(git rev-parse --short ${BRANCH})
-    echo "Updating OpenFLIXR2 Setup Script to '${GH_COMMIT}' on '${BRANCH}'."
+    info "  Updating OpenFLIXR2 Setup Script to '${GH_COMMIT}' on '${BRANCH}'."
     git reset --hard "${BRANCH}" > /dev/null 2>&1 || fatal "Failed to reset to '${BRANCH}'."
     git pull > /dev/null 2>&1 || fatal "Failed to pull recent changes from git."
     git for-each-ref --format '%(refname:short)' refs/heads | grep -v master | xargs git branch -D > /dev/null 2>&1 || true
     chmod +x "/opt/OpenFLIXR2.SetupScript/main.sh" > /dev/null 2>&1 || fatal "OpenFLIXR2 Setup Script must be executable."
-    echo "OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${BRANCH}'"
+    info "  OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${BRANCH}'"
 else
     if [[ -d /opt/OpenFLIXR2.SetupScript/ ]]; then
         rm -r /opt/OpenFLIXR2.SetupScript/
@@ -214,7 +249,7 @@ echo ""
 echo ""
 
 if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" || -f "/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save" ]]; then
-    echo "- Removing bad sources (nijel/phpmyadmin)"
+    info "- Removing bad sources (nijel/phpmyadmin)"
     if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" ]]; then
         rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list
     fi
@@ -223,22 +258,22 @@ if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" || -f "/
     fi
     echo ""
 fi
-echo "- Fixing setupopenflixr symlink"
+info "- Fixing setupopenflixr symlink"
 bash /opt/OpenFLIXR2.SetupScript/main.sh -s
-echo "- Running 'setupopenflixr -f {fix name}' to do fixes"
-echo "  - Updater"
-bash /opt/OpenFLIXR2.SetupScript/main.sh -f updater || echo "  - Unable to run command or an error occurred..."
-echo "  - Mono"
-bash /opt/OpenFLIXR2.SetupScript/main.sh -f mono || echo "  - Unable to run command or an error occurred..."
-echo "  - Redis"
-bash /opt/OpenFLIXR2.SetupScript/main.sh -f redis || echo "  - Unable to run command or an error occurred..."
-echo "  - PHP"
-bash /opt/OpenFLIXR2.SetupScript/main.sh -f php || echo "  - Unable to run command or an error occurred..."
-echo "- Done"
+info "- Running 'setupopenflixr -f {fix name}' to do fixes"
+info "  - Updater"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f updater || error "  - Unable to run command or an error occurred..."
+info "  - Mono"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f mono || error "  - Unable to run command or an error occurred..."
+info "  - Redis"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f redis || error "  - Unable to run command or an error occurred..."
+info "  - PHP"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f php || error "  - Unable to run command or an error occurred..."
+info "- Done"
 
 echo ""
-echo "Doing some basic DNS checks..."
-echo "If any of these fail, you might have issues in the next steps."
+info "Doing some basic DNS checks..."
+warning "If any of these fail, you might have issues in the next steps."
 dns_servers_ips=("8.8.8.8" "208.67.222.222" "127.0.0.1" "")
 dns_servers_names=("Google" "OpenDNS" "OpenFLIXR Local Resolution" "OpenFLIXR Auto DNS Resolution")
 websites=("example.com" "google.com" "github.com")
@@ -248,43 +283,43 @@ for dns_server_index in ${!dns_servers_ips[@]}; do
     dns_servers_name=${dns_servers_names[${dns_server_index}]}
     for website in ${websites[@]}; do
         if [[ ${dns_server_ip} == "" ]]; then
-            echo "- Checking ${website} via ${dns_servers_name}"
+            info "- Checking ${website} via ${dns_servers_name}"
             dig ${website} > /dev/null
         else
-            echo "- Checking ${website} via ${dns_servers_name} (${dns_server_ip})"
+            info "- Checking ${website} via ${dns_servers_name} (${dns_server_ip})"
             dig @${dns_server_ip} ${website} > /dev/null
         fi
         return_code=$?
         if [[ ${return_code} -eq 0 ]]; then
-            echo "  Good!"
+            info "  Good!"
         else
             DNS_PASS=0
             case "${return_code}" in
                 1)
-                    echo "  I messed up..."
+                    error "  I messed up..."
                     ;;
                 8)
-                    echo "  This shouldn't have happened..."
+                    error "  This shouldn't have happened..."
                     ;;
                 9)
-                    echo "  No reply from server..."
+                    error "  No reply from server..."
                     ;;
                 10)
-                    echo "  dig internal error..."
+                    error "  dig internal error..."
                     ;;
             esac
         fi
     done
 done
-echo "- Done"
+info "- Done"
 
 echo ""
 if [[ ${WAIT_COMPLETE} == 1 && ${DNS_PASS} == 1 ]]; then
-    echo "|------------------------------------------------|"
-    echo "| OpenFLIXR is PROBABLY ready for the next step! |"
-    echo "|------------------------------------------------|"
+    info "|------------------------------------------------|"
+    info "| OpenFLIXR is PROBABLY ready for the next step! |"
+    info "|------------------------------------------------|"
 else
-    echo "> Something went wrong and you probably shouldn't continue... "
-    echo "> Check the wiki for troubleshooting information."
-    echo "> If further help is needed, join OpenFLIXR's Discord Server or post on the forums for assistance"
+    warning "> Something went wrong and you probably shouldn't continue... "
+    warning "> Check the wiki for troubleshooting information."
+    warning "> If further help is needed, join OpenFLIXR's Discord Server or post on the forums for assistance"
 fi
