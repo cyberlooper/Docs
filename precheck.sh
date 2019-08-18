@@ -35,7 +35,7 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
 fi
 if [[ ${EUID} -ne 0 ]]; then
     if [[ -f "precheck.sh" ]]; then
-        exec sudo bash -c precheck.sh
+        exec sudo bash precheck.sh
     else
         exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"
     fi
@@ -113,7 +113,13 @@ while (true); do
             if [[ -f "precheck.sh" ]]; then
                 echo 'bash precheck.sh' >> .bashrc
             else
-                echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"' >> .bashrc
+                if [[ ${DEV_BRANCH:-} == "development" ]]; then
+                    if [[ ${PRECHECK_BRANCH:-} == "" ]];
+                        echo "SETUP_BRANCH not set. Defaulting to master"
+                    fi
+                    BRANCH="${PRECHECK_BRANCH:-master}"
+                fi
+                echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${BRANCH}'/precheck.sh)"' >> .bashrc
             fi
         fi
     else
@@ -163,7 +169,14 @@ echo ""
 echo "Getting latest for 'setupopenflixr'"
 if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
     cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
-    BRANCH="origin/master"
+    if [[ ${DEV_BRANCH:-} == "development" ]]; then
+        if [[ ${SETUP_BRANCH:-} == "" ]];
+            echo "SETUP_BRANCH not set. Defaulting to origin/master"
+        fi
+        BRANCH="${SETUP_BRANCH:-origin/master}"
+    else
+        BRANCH="origin/master"
+    fi
     echo "Fetching recent changes from git."
     git fetch > /dev/null 2>&1 || fatal "Failed to fetch recent changes from git."
     GH_COMMIT=$(git rev-parse --short ${BRANCH})
@@ -174,11 +187,25 @@ if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScrip
     chmod +x "/opt/OpenFLIXR2.SetupScript/main.sh" > /dev/null 2>&1 || fatal "OpenFLIXR2 Setup Script must be executable."
     echo "OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${BRANCH}'"
 else
+    if [[ -d /opt/OpenFLIXR2.SetupScript/ ]]; then
+        rm -r /opt/OpenFLIXR2.SetupScript/
+    fi
     git clone https://github.com/openflixr/OpenFLIXR2.SetupScript /opt/OpenFLIXR2.SetupScript
 fi
-echo "- Removing bad ppa (nijel/phpmyadmin)"
-rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list
-rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save
+if [[ ${DEV_MODE:-} == "local" && -d "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/" ]]; then
+    cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/main.sh" "/opt/OpenFLIXR2.SetupScript/"
+    cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/.scripts" "/opt/OpenFLIXR2.SetupScript/"
+fi
+
+if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" || -f "/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save" ]]; then
+    echo "- Removing bad sources (nijel/phpmyadmin)"
+    if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" ]]; then
+        rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list
+    fi
+    if [[ -f "/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save" ]]; then
+        rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save
+    fi
+fi
 echo "- Fixing setupopenflixr symlink"
 bash /opt/OpenFLIXR2.SetupScript/main.sh -s
 echo "- Running 'setupopenflixr -f {fix name}' to do fixes"
