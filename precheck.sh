@@ -6,6 +6,10 @@ readonly DETECTED_PGID=$(id -g "${DETECTED_PUID}" 2> /dev/null || true)
 readonly DETECTED_UGROUP=$(id -gn "${DETECTED_PUID}" 2> /dev/null || true)
 readonly DETECTED_HOMEDIR=$(eval echo "~${DETECTED_UNAME}" 2> /dev/null || true)
 
+if [[ -f "${DETECTED_HOMEDIR}/precheck.config" ]]; then
+    source "${DETECTED_HOMEDIR}/precheck.config"
+fi
+
 start=$(date +%s)
 start_display=$(date)
 duration=""
@@ -34,7 +38,7 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
     exit 1
 fi
 if [[ ${EUID} -ne 0 ]]; then
-    if [[ -f "precheck.sh" ]]; then
+    if [[ ${DEV_MODE:-} == "local" && -f "precheck.sh" ]]; then
         exec sudo bash precheck.sh
     else
         if [[ ${DEV_BRANCH:-} == "development" ]]; then
@@ -206,6 +210,8 @@ if [[ ${DEV_MODE:-} == "local" && -d "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript
     cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/main.sh" "/opt/OpenFLIXR2.SetupScript/"
     cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/.scripts" "/opt/OpenFLIXR2.SetupScript/"
 fi
+echo ""
+echo ""
 
 if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" || -f "/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save" ]]; then
     echo "- Removing bad sources (nijel/phpmyadmin)"
@@ -215,6 +221,7 @@ if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" || -f "/
     if [[ -f "/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save" ]]; then
         rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save
     fi
+    echo ""
 fi
 echo "- Fixing setupopenflixr symlink"
 bash /opt/OpenFLIXR2.SetupScript/main.sh -s
