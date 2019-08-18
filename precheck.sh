@@ -29,7 +29,7 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
     exit 1
 fi
 if [[ ${EUID} -ne 0 ]]; then
-    exec sudo bash precheck.sh
+    exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"
 fi
 
 TODAY=$(date)
