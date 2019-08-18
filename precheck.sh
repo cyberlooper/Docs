@@ -98,7 +98,7 @@ while (true); do
     if [[ ${APT_COUNT} = 0 && ${UPDATE_COUNT} = 0 && ${UPGRADE_COUNT} = 0 ]]; then
         WAIT_COMPLETE=1
         echo "> Completed!"
-        sed -i 's#Running precheck script##g' ".bashrc"
+        sed -i 's#echo "Running precheck script"##g' ".bashrc"
         sed -i 's#bash precheck.sh##g' ".bashrc"
         sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"##g' ".bashrc"
         break
@@ -109,7 +109,7 @@ while (true); do
         echo "> 'sudo reboot' can be used to reboot the machine and this script will run again automatically when you log in again."
         if [[ $(grep -c "precheck.sh" ".bashrc") == 0 ]]; then
             echo "" >> .bashrc
-            echo "Running precheck script" >> .bashrc
+            echo 'echo "Running precheck script"' >> .bashrc
             if [[ -f "precheck.sh" ]]; then
                 echo 'bash precheck.sh' >> .bashrc
             else
