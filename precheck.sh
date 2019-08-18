@@ -37,7 +37,15 @@ if [[ ${EUID} -ne 0 ]]; then
     if [[ -f "precheck.sh" ]]; then
         exec sudo bash precheck.sh
     else
-        exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"
+        if [[ ${DEV_BRANCH:-} == "development" ]]; then
+            if [[ ${PRECHECK_BRANCH:-} == "" ]];
+                echo "SETUP_BRANCH not set. Defaulting to master"
+            fi
+            BRANCH="${PRECHECK_BRANCH:-master}"
+        else
+            BRANCH="master"
+        fi
+        exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/${BRANCH}/precheck.sh)"
     fi
 fi
 
@@ -118,6 +126,8 @@ while (true); do
                         echo "SETUP_BRANCH not set. Defaulting to master"
                     fi
                     BRANCH="${PRECHECK_BRANCH:-master}"
+                else
+                    BRANCH="master"
                 fi
                 echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${BRANCH}'/precheck.sh)"' >> .bashrc
             fi
