@@ -22,6 +22,11 @@ WAIT_COMPLETE=0
 DNS_PASS=1
 FAILED=0
 
+fatal() {
+    echo -e "$*"
+    exit 1
+}
+
 exec 1> >(tee -a precheck.log) 2>&1
 
 if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
@@ -29,9 +34,14 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
     exit 1
 fi
 if [[ ${EUID} -ne 0 ]]; then
-    exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"
+    if [[ -f "precheck.sh" ]]; then
+        exec sudo bash -c precheck.sh
+    else
+        exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"
+    fi
 fi
 
+clear
 TODAY=$(date)
 echo "-----------------------------------------------------"
 echo "Date:          $TODAY"
@@ -48,7 +58,7 @@ if [[ ! -f "precheck_nouptime" ]]; then
             touch precheck_nouptime
             break
         else
-            echo -en "\rCurrent Uptime: ${UPTIME_HOURS} hours ${UPTIME_MINUTES} minutes ${UPTIME_SECONDS} seconds"
+            echo -en "\rCurrent Uptime: ${UPTIME_HOURS} hours ${UPTIME_MINUTES} minutes ${UPTIME_SECONDS} seconds    "
         fi
         sleep 5s
     done
@@ -88,12 +98,24 @@ while (true); do
     if [[ ${APT_COUNT} = 0 && ${UPDATE_COUNT} = 0 && ${UPGRADE_COUNT} = 0 ]]; then
         WAIT_COMPLETE=1
         echo "> Completed!"
+        sed -i 's#Running precheck script##g' ".bashrc"
+        sed -i 's#bash precheck.sh##g' ".bashrc"
+        sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"##g' ".bashrc"
         break
     elif [[ ${APT_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPDATE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPGRADE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} ]]; then
         echo "> It has been more than ${WAIT_TIME} minutes since at least one of the above changed..."
-        echo "> You might want to consider rebooting and running this script again."
+        echo "> You might want to consider rebooting."
         echo "> Press Ctrl+C or Cmd+C to exit this script at any time."
-        echo "> 'sudo reboot' can be used to reboot the machine."
+        echo "> 'sudo reboot' can be used to reboot the machine and this script will run again automatically when you log in again."
+        if [[ $(grep -c "precheck.sh" ".bashrc") == 0 ]]; then
+            echo "" >> .bashrc
+            echo "Running precheck script" >> .bashrc
+            if [[ -f "precheck.sh" ]]; then
+                echo 'bash precheck.sh' >> .bashrc
+            else
+                echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"' >> .bashrc
+            fi
+        fi
     else
         echo "> Keep waiting..."
     fi
@@ -130,39 +152,39 @@ done
 
 echo ""
 echo "Putting some fixes in place..."
+echo "These fixes can be run again later using 'setupopenflixr'"
 echo ""
-echo "Updating setup page"
-if [[ ! -f "/usr/share/nginx/html/setup/index.php.orig" ]]; then
-    cp /usr/share/nginx/html/setup/index.php /usr/share/nginx/html/setup/index.php.orig
-fi
-if [[ ! -f "/usr/share/nginx/html/setup/index.php.placeholder" ]]; then
-    echo "If you are seeing this, your system isn't ready..." > index.php.placeholder
-    mv index.php.placeholder /usr/share/nginx/html/setup/index.php.placeholder
-    mv /usr/share/nginx/html/setup/index.php.placeholder /usr/share/nginx/html/setup/index.php
+echo "Getting latest for 'setupopenflixr'"
+if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
+    cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
+    BRANCH="origin/master"
+    echo "Fetching recent changes from git."
+    git fetch > /dev/null 2>&1 || fatal "Failed to fetch recent changes from git."
+    GH_COMMIT=$(git rev-parse --short ${BRANCH})
+    echo "Updating OpenFLIXR2 Setup Script to '${GH_COMMIT}' on '${BRANCH}'."
+    git reset --hard "${BRANCH}" > /dev/null 2>&1 || fatal "Failed to reset to '${BRANCH}'."
+    git pull > /dev/null 2>&1 || fatal "Failed to pull recent changes from git."
+    git for-each-ref --format '%(refname:short)' refs/heads | grep -v master | xargs git branch -D > /dev/null 2>&1 || true
+    chmod +x "/opt/OpenFLIXR2.SetupScript/main.sh" > /dev/null 2>&1 || fatal "OpenFLIXR2 Setup Script must be executable."
+    echo "OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${BRANCH}'"
 else
-    mv /usr/share/nginx/html/setup/index.php.placeholder /usr/share/nginx/html/setup/index.php
+    git clone https://github.com/openflixr/OpenFLIXR2.SetupScript /opt/OpenFLIXR2.SetupScript
 fi
-
-echo ""
-echo "Fixing mono"
-if [[ ! -f "/etc/mono/config.openflixr" ]]; then
-    mv "/etc/mono/config" "/etc/mono/config.openflixr"
-fi
-if [[ -f "/etc/mono/config.dpkg-new" ]]; then
-    cp "/etc/mono/config.dpkg-new" "/etc/mono/config"
-fi
-
-echo ""
-echo "Fixing redis config"
-sed -i "s/bind 127.0.0.1 ::1/bind 127.0.0.1/g" "/etc/redis/redis.conf"
-
-echo ""
-echo "Fixing php"
-export DEBIAN_FRONTEND=noninteractive
-export UCF_FORCE_CONFFNEW=1
-apt-get -y -o Dpkg::Options::=--force-confnew install php7.3-fpm
-export DEBIAN_FRONTEND=
-export UCF_FORCE_CONFFNEW=
+echo "- Removing bad ppa (nijel/phpmyadmin)"
+rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list
+rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save
+echo "- Fixing setupopenflixr symlink"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -s
+echo "- Running 'setupopenflixr -f {fix name}' to do fixes"
+echo "  - Updater"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f updater || echo "  - Unable to run command or an error occurred..."
+echo "  - Mono"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f mono || echo "  - Unable to run command or an error occurred..."
+echo "  - Redis"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f redis || echo "  - Unable to run command or an error occurred..."
+echo "  - PHP"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -f php || echo "  - Unable to run command or an error occurred..."
+echo "- Done"
 
 echo ""
 echo "Doing some basic DNS checks..."
@@ -204,6 +226,7 @@ for dns_server_index in ${!dns_servers_ips[@]}; do
         fi
     done
 done
+echo "- Done"
 
 echo ""
 if [[ ${WAIT_COMPLETE} == 1 && ${DNS_PASS} == 1 ]]; then
