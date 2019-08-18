@@ -123,6 +123,8 @@ while (true); do
     if [[ ${APT_COUNT} != ${APT_COUNT_LAST} ]]; then
         APT_COUNT_LAST=${APT_COUNT}
         APT_COUNT_CHANGED=$(date +%s)
+    elif [[ ${APT_COUNT} == 0 ]]; then
+        APT_COUNT_CHANGED=""
     fi
     if [[ ${APT_COUNT_CHANGED:-} != "" ]]; then
         APT_COUNT_LAST_ELAPSED=$(($(date +%s)-${APT_COUNT_CHANGED}))
@@ -132,6 +134,8 @@ while (true); do
     if [[ ${UPDATE_COUNT} != ${UPDATE_COUNT_LAST} ]]; then
         UPDATE_COUNT_LAST=${UPDATE_COUNT}
         UPDATE_COUNT_CHANGED=$(date +%s)
+    elif [[ ${UPDATE_COUNT} == 0 ]]; then
+        UPDATE_COUNT_CHANGED=""
     fi
     if [[ ${UPDATE_COUNT_CHANGED:-} != "" ]]; then
         UPDATE_COUNT_LAST_ELAPSED=$(($(date +%s)-${UPDATE_COUNT_CHANGED}))
@@ -141,6 +145,8 @@ while (true); do
     if [[ ${UPGRADE_COUNT} != ${UPGRADE_COUNT_LAST} ]]; then
         UPGRADE_COUNT_LAST=${UPGRADE_COUNT}
         UPGRADE_COUNT_CHANGED=$(date +%s)
+    elif [[ ${UPGRADE_COUNT} == 0 ]]; then
+        UPGRADE_COUNT_CHANGED=""
     fi
     if [[ ${UPGRADE_COUNT_CHANGED:-} != "" ]]; then
         UPGRADE_COUNT_LAST_ELAPSED=$(($(date +%s)-${UPGRADE_COUNT_CHANGED}))
