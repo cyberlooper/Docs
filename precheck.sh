@@ -38,7 +38,7 @@ if [[ ${EUID} -ne 0 ]]; then
         exec sudo bash precheck.sh
     else
         if [[ ${DEV_BRANCH:-} == "development" ]]; then
-            if [[ ${PRECHECK_BRANCH:-} == "" ]];
+            if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
                 echo "SETUP_BRANCH not set. Defaulting to master"
             fi
             BRANCH="${PRECHECK_BRANCH:-master}"
@@ -122,7 +122,7 @@ while (true); do
                 echo 'bash precheck.sh' >> .bashrc
             else
                 if [[ ${DEV_BRANCH:-} == "development" ]]; then
-                    if [[ ${PRECHECK_BRANCH:-} == "" ]];
+                    if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
                         echo "SETUP_BRANCH not set. Defaulting to master"
                     fi
                     BRANCH="${PRECHECK_BRANCH:-master}"
@@ -180,7 +180,7 @@ echo "Getting latest for 'setupopenflixr'"
 if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
     cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
     if [[ ${DEV_BRANCH:-} == "development" ]]; then
-        if [[ ${SETUP_BRANCH:-} == "" ]];
+        if [[ ${SETUP_BRANCH:-} == "" ]]; then
             echo "SETUP_BRANCH not set. Defaulting to origin/master"
         fi
         BRANCH="${SETUP_BRANCH:-origin/master}"
