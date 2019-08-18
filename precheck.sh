@@ -68,19 +68,21 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
     error "Running as root is not supported. Please run as a standard user with sudo."
     exit 1
 fi
+
+if [[ ${DEV_BRANCH:-} == "development" ]]; then
+    if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
+        warning "PRECHECK_BRANCH not set. Defaulting to master"
+    fi
+    if [[ ${SETUP_BRANCH:-} == "" ]]; then
+        warning "SETUP_BRANCH not set. Defaulting to origin/master"
+    fi
+fi
+
 if [[ ${EUID} -ne 0 ]]; then
     if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
         exec sudo bash precheck.sh
     else
-        if [[ ${DEV_BRANCH:-} == "development" ]]; then
-            if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
-                warning "SETUP_BRANCH not set. Defaulting to master"
-            fi
-            BRANCH="${PRECHECK_BRANCH:-master}"
-        else
-            BRANCH="master"
-        fi
-        exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/${BRANCH}/precheck.sh)"
+        exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh)"
     fi
 fi
 
@@ -160,15 +162,7 @@ while (true); do
             if [[ -f "$precheck.sh" ]]; then
                 echo 'bash precheck.sh' >> .bashrc
             else
-                if [[ ${DEV_BRANCH:-} == "development" ]]; then
-                    if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
-                        echo "SETUP_BRANCH not set. Defaulting to master"
-                    fi
-                    BRANCH="${PRECHECK_BRANCH:-master}"
-                else
-                    BRANCH="master"
-                fi
-                echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${BRANCH}'/precheck.sh)"' >> .bashrc
+                echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"' >> .bashrc
             fi
         fi
     else
@@ -218,23 +212,15 @@ echo ""
 info "- Getting latest for 'setupopenflixr'"
 if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
     cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
-    if [[ ${DEV_BRANCH:-} == "development" ]]; then
-        if [[ ${SETUP_BRANCH:-} == "" ]]; then
-            info "  - SETUP_BRANCH not set. Defaulting to origin/master"
-        fi
-        BRANCH="${SETUP_BRANCH:-origin/master}"
-    else
-        BRANCH="origin/master"
-    fi
     info "  Fetching recent changes from git."
     git fetch > /dev/null 2>&1 || fatal "Failed to fetch recent changes from git."
-    GH_COMMIT=$(git rev-parse --short ${BRANCH})
-    info "  Updating OpenFLIXR2 Setup Script to '${GH_COMMIT}' on '${BRANCH}'."
-    git reset --hard "${BRANCH}" > /dev/null 2>&1 || fatal "Failed to reset to '${BRANCH}'."
+    GH_COMMIT=$(git rev-parse --short ${SETUP_BRANCH:-origin/master})
+    info "  Updating OpenFLIXR2 Setup Script to '${GH_COMMIT}' on '${SETUP_BRANCH:-origin/master}'."
+    git reset --hard "${SETUP_BRANCH:-origin/master}" > /dev/null 2>&1 || fatal "Failed to reset to '${SETUP_BRANCH:-origin/master}'."
     git pull > /dev/null 2>&1 || fatal "Failed to pull recent changes from git."
     git for-each-ref --format '%(refname:short)' refs/heads | grep -v master | xargs git branch -D > /dev/null 2>&1 || true
     chmod +x "/opt/OpenFLIXR2.SetupScript/main.sh" > /dev/null 2>&1 || fatal "OpenFLIXR2 Setup Script must be executable."
-    info "  OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${BRANCH}'"
+    info "  OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${SETUP_BRANCH:-origin/master}'"
 else
     if [[ -d /opt/OpenFLIXR2.SetupScript/ ]]; then
         rm -r /opt/OpenFLIXR2.SetupScript/
@@ -269,7 +255,7 @@ info "  - Redis"
 bash /opt/OpenFLIXR2.SetupScript/main.sh -f redis || error "  - Unable to run command or an error occurred..."
 info "  - PHP"
 bash /opt/OpenFLIXR2.SetupScript/main.sh -f php || error "  - Unable to run command or an error occurred..."
-info "- Done"
+info "- Fixes completed"
 
 echo ""
 info "Doing some basic DNS checks..."
@@ -311,7 +297,7 @@ for dns_server_index in ${!dns_servers_ips[@]}; do
         fi
     done
 done
-info "- Done"
+info "- DNS Check complete"
 
 echo ""
 if [[ ${WAIT_COMPLETE} == 1 && ${DNS_PASS} == 1 ]]; then
