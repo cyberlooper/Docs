@@ -338,9 +338,11 @@ if [[ ${WAIT_COMPLETE} == 1 && ${DNS_PASS} == 1 ]]; then
                 [yY]*)
                     touch "${PRECHECK_DIR}/rebootselected"
                     reboot
+                    break
                     ;;
                 [nN]*)
                     warning "Not rebooting!"
+                    break
                     ;;
                 *)
                     echo "Please enter Y, Yes, N, or No"
