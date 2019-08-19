@@ -148,9 +148,6 @@ if [[ ! -f "${PRECHECK_DIR}/processcheckcomplete" ]]; then
             touch "${PRECHECK_DIR}/processcheckcomplete"
             info "- Completed!"
             log "  Elapsed: ${duration}"
-            sed -i 's#echo "Running precheck script"##g' ".bashrc"
-            sed -i 's#bash precheck.sh##g' ".bashrc"
-            sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/master/precheck.sh)"##g' ".bashrc"
             break
         elif [[ ${APT_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPDATE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPGRADE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} ]]; then
             echo "> It has been more than ${WAIT_TIME} minutes since at least one of the above changed..."
@@ -290,7 +287,6 @@ if [[ ! -f "${PRECHECK_DIR}/dnscheckcomplete" ]]; then
             return_code=$?
             if [[ ${return_code} -eq 0 ]]; then
                 info "  Good!"
-                "${PRECHECK_DIR}/dnscheckcomplete"
             else
                 DNS_PASS=0
                 case "${return_code}" in
@@ -315,12 +311,43 @@ else
     DNS_PASS=1
     info "DNS Checks already completed!"
 fi
-
+if [[ ${DNS_PASS} == 1 ]]; then
+    touch "${PRECHECK_DIR}/dnscheckcomplete"
+fi
 echo ""
+if [[ ${WAIT_COMPLETE} == 1 ]]; then
+    sed -i 's#echo "Running precheck script"##g' ".bashrc"
+    sed -i 's#bash precheck.sh##g' ".bashrc"
+    sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/.*/precheck.sh)"##g' ".bashrc"
+fi
 if [[ ${WAIT_COMPLETE} == 1 && ${DNS_PASS} == 1 ]]; then
     info "|------------------------------------------------|"
     info "| OpenFLIXR is PROBABLY ready for the next step! |"
+    if [[ ! -f "${PRECHECK_DIR}/rebootselected" ]]; then
+        info "| REBOOT RECOMMENDED!                            |"
+    fi
     info "|------------------------------------------------|"
+    if [[ ! -f "${PRECHECK_DIR}/rebootselected" ]]; then
+        echo ""
+        while true; do
+            read -t60 -p 'Do you want to reboot now? (Automatically YES after 60 seconds) [Y/n]: ' reboot
+            if [ $? -gt 128 ]; then
+                reboot="Y"
+            fi
+            case ${reboot} in
+                [yY]*)
+                    touch "${PRECHECK_DIR}/rebootselected"
+                    reboot
+                    ;;
+                [nN]*)
+                    warning "Not rebooting!"
+                    ;;
+                *)
+                    echo "Please enter Y, Yes, N, or No"
+                    ;;
+            esac
+        done
+    fi
 else
     warning "> Something went wrong and you probably shouldn't continue... "
     warning "> Check the wiki for troubleshooting information."
