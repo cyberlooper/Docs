@@ -37,6 +37,12 @@ debug() {
         echo -e "${NC}$(date +"%F %T") ${GRN}[DEBUG]${NC}      $*${NC}" | tee -a "${LOG_FILE}"
     fi
 }
+# Cleanup Function
+cleanup() {
+    log "Removing lock file"
+    rm "${PRECHECK_DIR}/precheck.lock"
+}
+trap 'cleanup' 0 1 2 3 6 14 15 INT
 
 exec 2> >(tee -a "${LOG_FILE}")
 
@@ -65,6 +71,13 @@ fi
 
 if [[ ! -d "${PRECHECK_DIR}" ]]; then
     mkdir -p "${PRECHECK_DIR}"
+fi
+
+if [[ -f "${PRECHECK_DIR}/precheck.lock" ]]; then
+    echo "Precheck already running. If this is in error, you may remove the file by running 'rm ${PRECHECK_DIR}/precheck.lock'"
+    exit
+else
+    touch "${PRECHECK_DIR}/precheck.lock"
 fi
 
 if [[ ${DEV_BRANCH:-} == "development" ]]; then
@@ -122,16 +135,18 @@ if [[ $(grep -c "precheck.sh" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
     if [[ -f "$precheck.sh" ]]; then
         echo 'bash precheck.sh' >> "${DETECTED_HOMEDIR}/.bashrc"
     else
-        echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"' >> .bashrc
+        echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"' >> "${DETECTED_HOMEDIR}/.bashrc"
     fi
     info "- Done"
+else
+    sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/.*/precheck.sh)"#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"#g' >> "${DETECTED_HOMEDIR}/.bashrc"
 fi
 info "Temporarily bypassing password for sudo so this will run on reboot"
 touch "/etc/sudoers.d/precheck"
 echo "openflixr ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/precheck" || fatal "Unable to add"
 info "- Done"
 setupopenflixr --no-log-submission -p uptime
-setupopenflixr --no-log-submission -p process_check
+setupopenflixr --no-log-submission -p process_check || exit
 info "Putting some fixes in place..."
 setupopenflixr --no-log-submission -f sources
 info "Checking that Apt Update works"
