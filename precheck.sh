@@ -131,14 +131,18 @@ if [[ $(grep -c "precheck.sh" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
     info "Adding precheck script to .bashrc to run on boot until this is all done..."
     echo "" >> "${DETECTED_HOMEDIR}/.bashrc"
     echo 'echo "Running precheck script"' >> "${DETECTED_HOMEDIR}/.bashrc"
-    if [[ -f "$precheck.sh" ]]; then
+    if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
         echo 'bash precheck.sh' >> "${DETECTED_HOMEDIR}/.bashrc"
     else
         echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"' >> "${DETECTED_HOMEDIR}/.bashrc"
     fi
     info "- Done"
 else
-    sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/.*/precheck.sh)"#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"#g' >> "${DETECTED_HOMEDIR}/.bashrc"
+    if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
+        sed -i 's#bash.*precheck.sh.*"#bash precheck.sh#g' >> "${DETECTED_HOMEDIR}/.bashrc"
+    else
+        sed -i 's#bash.*precheck.sh.*"#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"#g' >> "${DETECTED_HOMEDIR}/.bashrc"
+    fi
 fi
 info "Temporarily bypassing password for sudo so this will run on reboot"
 touch "/etc/sudoers.d/precheck"
