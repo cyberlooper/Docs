@@ -129,12 +129,12 @@ info "Fixing nginx"
 if [[ -f "/etc/nginx/sites-enabled/reverse" ]]; then
     sudo sed -i 's/listen 443 ssl.*/#listen 443 ssl http2;  #ssl port config/g' "/etc/nginx/sites-enabled/reverse"
 fi
-ingo "- Done!"
+info "- Done!"
 setupopenflixr --no-log-submission -f updater
 setupopenflixr --no-log-submission -f mono
 setupopenflixr --no-log-submission -f redis
 setupopenflixr --no-log-submission -f php
 setupopenflixr --no-log-submission -p dns_check
 setupopenflixr --no-log-submission -p ready_check || exit
-setupopenflixr --no-log-submission -p prepare-upgrade
+setupopenflixr --no-log-submission -p prepare_upgrade
 setupopenflixr --no-log-submission -p upgrade
