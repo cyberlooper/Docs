@@ -138,10 +138,10 @@ if [[ $(grep -c "precheck.sh" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
     info "- Done"
 else
     if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
-        log "Updating .bashrc with 'bash precheck.sh'"
+        log "Updating .bashrc with 'precheck.sh'"
         sed -i 's#bash.*precheck.sh.*"#bash precheck.sh#g' >> "${DETECTED_HOMEDIR}/.bashrc"
     else
-        log "Updating .bashrc with 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"#g'"
+        log "Updating .bashrc with https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh"
         sed -i 's#bash.*precheck.sh.*"#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"#g' >> "${DETECTED_HOMEDIR}/.bashrc"
     fi
 fi
