@@ -51,16 +51,6 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
     exit 1
 fi
 
-if [[ ! -d "${PRECHECK_DIR}" ]]; then
-    mkdir -p "${PRECHECK_DIR}"
-fi
-if { set -C; 2>/dev/null > "${PRECHECK_DIR}/precheck.lock"; }; then
-    trap 'cleanup' 0 1 2 3 6 14 15 INT
-else
-    echo "Precheck already running. If this is in error, you may remove the file by running 'rm ${PRECHECK_DIR}/precheck.lock'"
-    exit
-fi
-
 if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
     source "${PRECHECK_DIR}/precheck.config"
     log "DEV_BRANCH='${DEV_BRANCH:-}'"
@@ -77,6 +67,16 @@ if [[ ${EUID} -ne 0 ]]; then
         log "Re-running https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh with sudo"
         exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh)"
     fi
+fi
+
+if [[ ! -d "${PRECHECK_DIR}" ]]; then
+    mkdir -p "${PRECHECK_DIR}"
+fi
+if { set -C; 2>/dev/null > "${PRECHECK_DIR}/precheck.lock"; }; then
+    trap 'cleanup' 0 1 2 3 6 14 15 INT
+else
+    echo "Precheck already running. If this is in error, you may remove the file by running 'rm ${PRECHECK_DIR}/precheck.lock'"
+    exit
 fi
 
 if [[ ${DEV_BRANCH:-} == "development" ]]; then
