@@ -45,6 +45,10 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
     exit 1
 fi
 
+if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
+    source "${PRECHECK_DIR}/precheck.config"
+fi
+
 if [[ ${EUID} -ne 0 ]]; then
     if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
         exec sudo bash precheck.sh
@@ -55,10 +59,6 @@ fi
 
 if [[ ! -d "${PRECHECK_DIR}" ]]; then
     mkdir -p "${PRECHECK_DIR}"
-fi
-
-if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
-    source "${PRECHECK_DIR}/precheck.config"
 fi
 
 if [[ ${DEV_BRANCH:-} == "development" ]]; then
