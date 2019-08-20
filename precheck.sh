@@ -64,14 +64,23 @@ fi
 if [[ ${DEV_BRANCH:-} == "development" ]]; then
     if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
         warning "PRECHECK_BRANCH not set. Defaulting to master"
+    else
+        info "PRECHECK_BRANCH is ${PRECHECK_BRANCH}"
     fi
     if [[ ${SETUP_BRANCH:-} == "" ]]; then
         warning "SETUP_BRANCH not set. Defaulting to origin/master"
+    else
+        info "SETUP_BRANCH is ${SETUP_BRANCH}"
     fi
 fi
 
 info " ------ Starting precheck ------"
 info "Getting latest for 'setupopenflixr'"
+if [[ -d /opt/OpenFLIXR2.SetupScript/ ]]; then
+    rm -r /opt/OpenFLIXR2.SetupScript/
+fi
+git clone https://github.com/openflixr/OpenFLIXR2.SetupScript /opt/OpenFLIXR2.SetupScript
+
 if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
     cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
     info "  Fetching recent changes from git."
@@ -84,10 +93,7 @@ if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScrip
     chmod +x "/opt/OpenFLIXR2.SetupScript/main.sh" > /dev/null 2>&1 || fatal "OpenFLIXR2 Setup Script must be executable."
     info "  OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${SETUP_BRANCH:-origin/master}'"
 else
-    if [[ -d /opt/OpenFLIXR2.SetupScript/ ]]; then
-        rm -r /opt/OpenFLIXR2.SetupScript/
-    fi
-    git clone https://github.com/openflixr/OpenFLIXR2.SetupScript /opt/OpenFLIXR2.SetupScript
+    fatal "- Something went wrong getting 'setupopenflixr'"
 fi
 if [[ ${DEV_MODE:-} == "local" && -d "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/" ]]; then
     cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/main.sh" "/opt/OpenFLIXR2.SetupScript/"
