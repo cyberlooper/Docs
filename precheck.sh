@@ -38,17 +38,6 @@ debug() {
     fi
 }
 
-if [[ ! -d "${PRECHECK_DIR}" ]]; then
-    mkdir -p "${PRECHECK_DIR}"
-fi
-
-if [[ -f "${PRECHECK_DIR}/precheck.lock" ]]; then
-    echo "Precheck already running. If this is in error, you may remove the file by running 'rm ${PRECHECK_DIR}/precheck.lock'"
-    exit
-else
-    touch "${PRECHECK_DIR}/precheck.lock"
-fi
-
 # Cleanup Function
 cleanup() {
     log "Removing lock file"
