@@ -150,7 +150,7 @@ if [[ ! -f "/etc/sudoers.d/precheck" ]]; then
     echo "openflixr ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/precheck" || fatal "Unable to add"
 fi
 info "- Done"
-setupopenflixr --no-log-submission -p uptime
+setupopenflixr --no-log-submission -p uptime || exit
 setupopenflixr --no-log-submission -p process_check || exit
 info "Putting some fixes in place..."
 setupopenflixr --no-log-submission -f sources
