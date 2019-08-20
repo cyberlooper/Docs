@@ -75,7 +75,7 @@ fi
 
 if [[ -f "${PRECHECK_DIR}/precheck.lock" ]]; then
     echo "Precheck already running. If this is in error, you may remove the file by running 'rm ${PRECHECK_DIR}/precheck.lock'"
-    exit
+    exit 255
 else
     touch "${PRECHECK_DIR}/precheck.lock"
 fi
