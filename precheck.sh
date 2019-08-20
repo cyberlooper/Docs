@@ -148,8 +148,11 @@ fi
 if [[ ! -f "/etc/sudoers.d/precheck" ]]; then
     info "Temporarily bypassing password for sudo so this will run on reboot"
     echo "openflixr ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/precheck" || fatal "Unable to add"
+    info "- Done"
+else
+    log "/etc/sudoers.d/precheck already exists"
 fi
-info "- Done"
+
 setupopenflixr --no-log-submission -p uptime || exit
 setupopenflixr --no-log-submission -p process_check || exit
 info "Putting some fixes in place..."
