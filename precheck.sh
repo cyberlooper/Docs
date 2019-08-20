@@ -138,13 +138,15 @@ if [[ $(grep -c "precheck.sh" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
     info "- Done"
 else
     if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
+        log "Updating .bashrc with 'bash precheck.sh'"
         sed -i 's#bash.*precheck.sh.*"#bash precheck.sh#g' >> "${DETECTED_HOMEDIR}/.bashrc"
     else
+        log "Updating .bashrc with 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"#g'"
         sed -i 's#bash.*precheck.sh.*"#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"#g' >> "${DETECTED_HOMEDIR}/.bashrc"
     fi
 fi
-info "Temporarily bypassing password for sudo so this will run on reboot"
 if [[ ! -f "/etc/sudoers.d/precheck" ]]; then
+    info "Temporarily bypassing password for sudo so this will run on reboot"
     echo "openflixr ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/precheck" || fatal "Unable to add"
 fi
 info "- Done"
