@@ -49,6 +49,19 @@ else
     touch "${PRECHECK_DIR}/precheck.lock"
 fi
 
+# Cleanup Function
+cleanup() {
+    log "Removing lock file"
+    rm "${PRECHECK_DIR}/precheck.lock"
+}
+
+exec 2> >(tee -a "${LOG_FILE}")
+
+if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
+    error "Running as root is not supported. Please run as a standard user with sudo."
+    exit 1
+fi
+
 if [[ ! -d "${PRECHECK_DIR}" ]]; then
     mkdir -p "${PRECHECK_DIR}"
 fi
@@ -58,20 +71,7 @@ if [[ -f "${PRECHECK_DIR}/precheck.lock" ]]; then
     exit
 else
     touch "${PRECHECK_DIR}/precheck.lock"
-fi
-
-# Cleanup Function
-cleanup() {
-    log "Removing lock file"
-    rm "${PRECHECK_DIR}/precheck.lock"
-}
-trap 'cleanup' 0 1 2 3 6 14 15 INT
-
-exec 2> >(tee -a "${LOG_FILE}")
-
-if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
-    error "Running as root is not supported. Please run as a standard user with sudo."
-    exit 1
+    trap 'cleanup' 0 1 2 3 6 14 15 INT
 fi
 
 if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
