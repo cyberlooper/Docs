@@ -7,14 +7,6 @@ readonly DETECTED_UGROUP=$(id -gn "${DETECTED_PUID}" 2> /dev/null || true)
 readonly DETECTED_HOMEDIR=$(eval echo "~${DETECTED_UNAME}" 2> /dev/null || true)
 readonly PRECHECK_DIR="${DETECTED_HOMEDIR}/precheck"
 
-if [[ ! -d "${PRECHECK_DIR}" ]]; then
-    mkdir -p "${PRECHECK_DIR}"
-fi
-
-if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
-    source "${PRECHECK_DIR}/precheck.config"
-fi
-
 # Colors
 # https://misc.flogisoft.com/bash/tip_colors_and_formatting
 readonly BLU='\e[34m'
@@ -53,20 +45,28 @@ if [[ ${DETECTED_PUID} == "0" ]] || [[ ${DETECTED_HOMEDIR} == "/root" ]]; then
     exit 1
 fi
 
+if [[ ${EUID} -ne 0 ]]; then
+    if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
+        exec sudo bash precheck.sh
+    else
+        exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh)"
+    fi
+fi
+
+if [[ ! -d "${PRECHECK_DIR}" ]]; then
+    mkdir -p "${PRECHECK_DIR}"
+fi
+
+if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
+    source "${PRECHECK_DIR}/precheck.config"
+fi
+
 if [[ ${DEV_BRANCH:-} == "development" ]]; then
     if [[ ${PRECHECK_BRANCH:-} == "" ]]; then
         warning "PRECHECK_BRANCH not set. Defaulting to master"
     fi
     if [[ ${SETUP_BRANCH:-} == "" ]]; then
         warning "SETUP_BRANCH not set. Defaulting to origin/master"
-    fi
-fi
-
-if [[ ${EUID} -ne 0 ]]; then
-    if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
-        exec sudo bash precheck.sh
-    else
-        exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh)"
     fi
 fi
 
