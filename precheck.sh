@@ -15,22 +15,6 @@ if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
     source "${PRECHECK_DIR}/precheck.config"
 fi
 
-start=$(date +%s)
-start_display=$(date)
-duration=""
-elapsed_minutes="none"
-APT_COUNT_LAST=0
-APT_COUNT_LAST_ELAPSED_MINUTES=0
-UPDATE_COUNT_LAST=0
-UPDATE_COUNT_LAST_ELAPSED_MINUTES=0
-UPGRADE_COUNT_LAST=0
-UPGRADE_COUNT_LAST_ELAPSED_MINUTES=0
-WAIT_TIME=5
-WAIT_UPTIME=10
-WAIT_COMPLETE=0
-DNS_PASS=1
-FAILED=0
-
 # Colors
 # https://misc.flogisoft.com/bash/tip_colors_and_formatting
 readonly BLU='\e[34m'
@@ -87,271 +71,70 @@ if [[ ${EUID} -ne 0 ]]; then
 fi
 
 info " ------ Starting precheck ------"
-
-if [[ ! -f "${PRECHECK_DIR}/uptimecomplete" ]]; then
-    echo ""
-    info "Waiting for the system to have been running for ${WAIT_UPTIME} minutes"
-    while (true); do
-        UPTIME_HOURS=$(awk '{print int($1/3600)}' /proc/uptime)
-        UPTIME_MINUTES=$(awk '{print int(($1%3600)/60)}' /proc/uptime)
-        UPTIME_SECONDS=$(awk '{print int($1%60)}' /proc/uptime)
-        if [[ ${UPTIME_HOURS} -gt 0 || ${UPTIME_MINUTES} -ge ${WAIT_UPTIME} ]]; then
-            touch "${PRECHECK_DIR}/uptimecomplete"
-            info "- Wait complete!"
-            break
-        else
-            echo -en "\rCurrent Uptime: ${UPTIME_HOURS} hours ${UPTIME_MINUTES} minutes ${UPTIME_SECONDS} seconds    "
-        fi
-        sleep 5s
-    done
+info "Getting latest for 'setupopenflixr'"
+if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
+    cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
+    info "  Fetching recent changes from git."
+    git fetch > /dev/null 2>&1 || fatal "Failed to fetch recent changes from git."
+    GH_COMMIT=$(git rev-parse --short ${SETUP_BRANCH:-origin/master})
+    info "  Updating OpenFLIXR2 Setup Script to '${GH_COMMIT}' on '${SETUP_BRANCH:-origin/master}'."
+    git reset --hard "${SETUP_BRANCH:-origin/master}" > /dev/null 2>&1 || fatal "Failed to reset to '${SETUP_BRANCH:-origin/master}'."
+    git pull > /dev/null 2>&1 || fatal "Failed to pull recent changes from git."
+    git for-each-ref --format '%(refname:short)' refs/heads | grep -v master | xargs git branch -D > /dev/null 2>&1 || true
+    chmod +x "/opt/OpenFLIXR2.SetupScript/main.sh" > /dev/null 2>&1 || fatal "OpenFLIXR2 Setup Script must be executable."
+    info "  OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${SETUP_BRANCH:-origin/master}'"
 else
-    info "System uptime check already completed!"
+    if [[ -d /opt/OpenFLIXR2.SetupScript/ ]]; then
+        rm -r /opt/OpenFLIXR2.SetupScript/
+    fi
+    git clone https://github.com/openflixr/OpenFLIXR2.SetupScript /opt/OpenFLIXR2.SetupScript
 fi
-
-if [[ ! -f "${PRECHECK_DIR}/processcheckcomplete" ]]; then
-    info "Waiting for the system to finish some processes..."
-    while (true); do
-        clear
-        elapsed=$(($(date +%s)-$start))
-        duration=$(date -ud @$elapsed +'%M minutes %S seconds')
-        echo ""
-        echo "Waiting for the system to finish some processes..."
-        echo "Started: ${start_display}"
-        echo "Now:     $(date)"
-        echo "Elapsed: ${duration}"
-        APT_COUNT=$(ps -ef | grep apt | grep -v tail | grep -v grep | wc -l)
-        echo " - Apt processes remaining: ${APT_COUNT}"
-        if [[ ${APT_COUNT} != 0 && ${APT_COUNT_LAST_ELAPSED:-} != "" ]]; then
-            echo "   Last changed: $(date -ud @${APT_COUNT_LAST_ELAPSED} +'%M minutes %S seconds')"
-        else
-            echo ""
-        fi
-
-        UPDATE_COUNT=$(ps -ef | grep update | grep -v "no-update" | grep -v tail | grep -v shellinabox | grep -v grep | wc -l)
-        echo " - Update processes remaining: ${UPDATE_COUNT}"
-        if [[ ${UPDATE_COUNT} != 0 && ${UPDATE_COUNT_LAST_ELAPSED:-} != "" ]]; then
-            echo "   Last changed: $(date -ud @${UPDATE_COUNT_LAST_ELAPSED} +'%M minutes %S seconds')"
-        else
-            echo ""
-        fi
-
-        UPGRADE_COUNT=$(ps -ef | grep upgrade | grep -v tail | grep -v shellinabox | grep -v unattended-upgrade | grep -v grep | wc -l)
-        echo " - Upgrade processes remaining: ${UPGRADE_COUNT}"
-        if [[ ${UPGRADE_COUNT} != 0 && ${UPGRADE_COUNT_LAST_ELAPSED:-} != "" ]]; then
-            echo "   Last changed: $(date -ud @${UPGRADE_COUNT_LAST_ELAPSED} +'%M minutes %S seconds')"
-        else
-            echo ""
-        fi
-
-        if [[ ${APT_COUNT} = 0 && ${UPDATE_COUNT} = 0 && ${UPGRADE_COUNT} = 0 ]]; then
-            WAIT_COMPLETE=1
-            touch "${PRECHECK_DIR}/processcheckcomplete"
-            info "- Completed!"
-            log "  Elapsed: ${duration}"
-            break
-        elif [[ ${APT_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPDATE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} || ${UPGRADE_COUNT_LAST_ELAPSED_MINUTES#0} -ge ${WAIT_TIME} ]]; then
-            echo "> It has been more than ${WAIT_TIME} minutes since at least one of the above changed..."
-            echo "> You might want to consider rebooting but you can wait, it just might take a while."
-            echo "> Press Ctrl+C or Cmd+C to exit this script at any time."
-            echo "> 'sudo reboot' can be used to reboot the machine and this script will run again automatically when you log in again."
-            if [[ $(grep -c "precheck.sh" ".bashrc") == 0 ]]; then
-                log "- Adding precheck script to .bashrc"
-                echo "" >> .bashrc
-                echo 'echo "Running precheck script"' >> .bashrc
-                if [[ -f "$precheck.sh" ]]; then
-                    echo 'bash precheck.sh' >> .bashrc
-                else
-                    echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"' >> .bashrc
-                fi
-            fi
-        else
-            echo "> Keep waiting..."
-        fi
-
-        if [[ ${APT_COUNT} != ${APT_COUNT_LAST} ]]; then
-            APT_COUNT_LAST=${APT_COUNT}
-            APT_COUNT_CHANGED=$(date +%s)
-        elif [[ ${APT_COUNT} == 0 ]]; then
-            APT_COUNT_CHANGED=""
-        fi
-        if [[ ${APT_COUNT_CHANGED:-} != "" ]]; then
-            APT_COUNT_LAST_ELAPSED=$(($(date +%s)-${APT_COUNT_CHANGED}))
-            APT_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${APT_COUNT_LAST_ELAPSED} +%M)
-        fi
-
-        if [[ ${UPDATE_COUNT} != ${UPDATE_COUNT_LAST} ]]; then
-            UPDATE_COUNT_LAST=${UPDATE_COUNT}
-            UPDATE_COUNT_CHANGED=$(date +%s)
-        elif [[ ${UPDATE_COUNT} == 0 ]]; then
-            UPDATE_COUNT_CHANGED=""
-        fi
-        if [[ ${UPDATE_COUNT_CHANGED:-} != "" ]]; then
-            UPDATE_COUNT_LAST_ELAPSED=$(($(date +%s)-${UPDATE_COUNT_CHANGED}))
-            UPDATE_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${UPDATE_COUNT_LAST_ELAPSED} +%M)
-        fi
-
-        if [[ ${UPGRADE_COUNT} != ${UPGRADE_COUNT_LAST} ]]; then
-            UPGRADE_COUNT_LAST=${UPGRADE_COUNT}
-            UPGRADE_COUNT_CHANGED=$(date +%s)
-        elif [[ ${UPGRADE_COUNT} == 0 ]]; then
-            UPGRADE_COUNT_CHANGED=""
-        fi
-        if [[ ${UPGRADE_COUNT_CHANGED:-} != "" ]]; then
-            UPGRADE_COUNT_LAST_ELAPSED=$(($(date +%s)-${UPGRADE_COUNT_CHANGED}))
-            UPGRADE_COUNT_LAST_ELAPSED_MINUTES=$(date -ud @${UPGRADE_COUNT_LAST_ELAPSED} +%M)
-        fi
-
-        sleep 5;
-    done
-else
-    WAIT_COMPLETE=1
-    info "Process check already completed!"
+if [[ ${DEV_MODE:-} == "local" && -d "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/" ]]; then
+    cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/main.sh" "/opt/OpenFLIXR2.SetupScript/"
+    cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/.scripts" "/opt/OpenFLIXR2.SetupScript/"
 fi
+info "- Done"
 
-if [[ ! -f "${PRECHECK_DIR}/fixescomplete" ]]; then
-    echo ""
-    info "Putting some fixes in place..."
-    info "These fixes can be run again later using 'setupopenflixr'"
-    echo ""
-    info "- Getting latest for 'setupopenflixr'"
-    if [[ -d /opt/OpenFLIXR2.SetupScript/.git ]] && [[ -d /opt/OpenFLIXR2.SetupScript/.scripts ]]; then
-        cd "/opt/OpenFLIXR2.SetupScript/" || fatal "Failed to change to '/opt/OpenFLIXR2.SetupScript/' directory."
-        info "  Fetching recent changes from git."
-        git fetch > /dev/null 2>&1 || fatal "Failed to fetch recent changes from git."
-        GH_COMMIT=$(git rev-parse --short ${SETUP_BRANCH:-origin/master})
-        info "  Updating OpenFLIXR2 Setup Script to '${GH_COMMIT}' on '${SETUP_BRANCH:-origin/master}'."
-        git reset --hard "${SETUP_BRANCH:-origin/master}" > /dev/null 2>&1 || fatal "Failed to reset to '${SETUP_BRANCH:-origin/master}'."
-        git pull > /dev/null 2>&1 || fatal "Failed to pull recent changes from git."
-        git for-each-ref --format '%(refname:short)' refs/heads | grep -v master | xargs git branch -D > /dev/null 2>&1 || true
-        chmod +x "/opt/OpenFLIXR2.SetupScript/main.sh" > /dev/null 2>&1 || fatal "OpenFLIXR2 Setup Script must be executable."
-        info "  OpenFLIXR2 Setup Script has been updated to '${GH_COMMIT}' on '${SETUP_BRANCH:-origin/master}'"
+info "Fixing setupopenflixr symlink"
+bash /opt/OpenFLIXR2.SetupScript/main.sh -s
+info "Bypassing pi-hole"
+sed -i "s#nameserver .*#nameserver 8.8.8.8#g" "/etc/resolv.conf"
+#if [[ $(grep -c "/etc/resolv.conf" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
+#    echo 'sudo sed -i "s#nameserver .*#nameserver 8.8.8.8#g" "/etc/resolv.conf"' >> "${DETECTED_HOMEDIR}/.bashrc"
+#fi
+info "- Done"
+if [[ $(grep -c "precheck.sh" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
+    info "Adding precheck script to .bashrc to run on boot until this is all done..."
+    echo "" >> "${DETECTED_HOMEDIR}/.bashrc"
+    echo 'echo "Running precheck script"' >> "${DETECTED_HOMEDIR}/.bashrc"
+    if [[ -f "$precheck.sh" ]]; then
+        echo 'bash precheck.sh' >> "${DETECTED_HOMEDIR}/.bashrc"
     else
-        if [[ -d /opt/OpenFLIXR2.SetupScript/ ]]; then
-            rm -r /opt/OpenFLIXR2.SetupScript/
-        fi
-        git clone https://github.com/openflixr/OpenFLIXR2.SetupScript /opt/OpenFLIXR2.SetupScript
+        echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/'${PRECHECK_BRANCH:-master}'/precheck.sh)"' >> .bashrc
     fi
-    if [[ ${DEV_MODE:-} == "local" && -d "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/" ]]; then
-        cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/main.sh" "/opt/OpenFLIXR2.SetupScript/"
-        cp -r "${DETECTED_HOMEDIR}/OpenFLIXR2.SetupScript/.scripts" "/opt/OpenFLIXR2.SetupScript/"
-    fi
-    echo ""
-    echo ""
-
-    if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" || -f "/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save" ]]; then
-        info "- Removing bad sources (nijel/phpmyadmin)"
-        if [[ -f "'/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list" ]]; then
-            rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list
-        fi
-        if [[ -f "/etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save" ]]; then
-            rm /etc/apt/sources.list.d/nijel-ubuntu-phpmyadmin-xenial.list.save
-        fi
-        echo ""
-    fi
-    info "- Fixing setupopenflixr symlink"
-    bash /opt/OpenFLIXR2.SetupScript/main.sh -s
-    info "- Running 'setupopenflixr -f {fix name}' to do fixes"
-    info "  - Updater"
-    bash /opt/OpenFLIXR2.SetupScript/main.sh -f updater || error "  - Unable to run command or an error occurred..."
-    info "  - Mono"
-    bash /opt/OpenFLIXR2.SetupScript/main.sh -f mono || error "  - Unable to run command or an error occurred..."
-    info "  - Redis"
-    bash /opt/OpenFLIXR2.SetupScript/main.sh -f redis || error "  - Unable to run command or an error occurred..."
-    info "  - PHP"
-    bash /opt/OpenFLIXR2.SetupScript/main.sh -f php || error "  - Unable to run command or an error occurred..."
-    info "- Fixes completed"
-    touch "${PRECHECK_DIR}/fixescomplete"
-else
-    info "Fixes already completed!"
+    info "- Done"
 fi
-
-if [[ ! -f "${PRECHECK_DIR}/dnscheckcomplete" ]]; then
-    echo ""
-    info "Doing some basic DNS checks..."
-    warning "If any of these fail, you might have issues in the next steps."
-    dns_servers_ips=("8.8.8.8" "208.67.222.222" "127.0.0.1" "")
-    dns_servers_names=("Google" "OpenDNS" "OpenFLIXR Local Resolution" "OpenFLIXR Auto DNS Resolution")
-    websites=("example.com" "google.com" "github.com")
-
-    for dns_server_index in ${!dns_servers_ips[@]}; do
-        dns_server_ip=${dns_servers_ips[${dns_server_index}]}
-        dns_servers_name=${dns_servers_names[${dns_server_index}]}
-        for website in ${websites[@]}; do
-            if [[ ${dns_server_ip} == "" ]]; then
-                info "- Checking ${website} via ${dns_servers_name}"
-                dig ${website} > /dev/null
-            else
-                info "- Checking ${website} via ${dns_servers_name} (${dns_server_ip})"
-                dig @${dns_server_ip} ${website} > /dev/null
-            fi
-            return_code=$?
-            if [[ ${return_code} -eq 0 ]]; then
-                info "  Good!"
-            else
-                DNS_PASS=0
-                case "${return_code}" in
-                    1)
-                        error "  I messed up..."
-                        ;;
-                    8)
-                        error "  This shouldn't have happened..."
-                        ;;
-                    9)
-                        error "  No reply from server..."
-                        ;;
-                    10)
-                        error "  dig internal error..."
-                        ;;
-                esac
-            fi
-        done
-    done
-    info "- DNS Check complete"
-else
-    DNS_PASS=1
-    info "DNS Checks already completed!"
+info "Temporarily bypassing password for sudo so this will run on reboot"
+touch "/etc/sudoers.d/precheck"
+echo "openflixr ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/precheck" || fatal "Unable to add"
+info "- Done"
+setupopenflixr --no-log-submission -p uptime
+setupopenflixr --no-log-submission -p process_check
+info "Putting some fixes in place..."
+setupopenflixr --no-log-submission -f sources
+info "Checking that Apt Update works"
+apt-get -y update > /dev/null || fatal "Apt Update failed!"
+info "- Success!"
+info "Fixing nginx"
+if [[ -f "/etc/nginx/sites-enabled/reverse" ]]; then
+    sudo sed -i 's/listen 443 ssl.*/#listen 443 ssl http2;  #ssl port config/g' "/etc/nginx/sites-enabled/reverse"
 fi
-if [[ ${DNS_PASS} == 1 ]]; then
-    touch "${PRECHECK_DIR}/dnscheckcomplete"
-fi
-echo ""
-if [[ ${WAIT_COMPLETE} == 1 ]]; then
-    sed -i 's#echo "Running precheck script"##g' ".bashrc"
-    sed -i 's#bash precheck.sh##g' ".bashrc"
-    sed -i 's#bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/.*/precheck.sh)"##g' ".bashrc"
-fi
-if [[ ${WAIT_COMPLETE} == 1 && ${DNS_PASS} == 1 ]]; then
-    info "|------------------------------------------------|"
-    info "| OpenFLIXR is PROBABLY ready for the next step! |"
-    if [[ ! -f "${PRECHECK_DIR}/rebootselected" ]]; then
-        info "| REBOOT RECOMMENDED!                            |"
-    fi
-    info "|------------------------------------------------|"
-    if [[ ! -f "${PRECHECK_DIR}/rebootselected" ]]; then
-        echo ""
-        while true; do
-            read -t60 -p 'Do you want to reboot now? (Automatically YES after 60 seconds) [Y/n]: ' reboot
-            if [ $? -gt 128 ]; then
-                reboot="Y"
-            fi
-            case ${reboot} in
-                [yY]*)
-                    touch "${PRECHECK_DIR}/rebootselected"
-                    reboot
-                    break
-                    ;;
-                [nN]*)
-                    warning "Not rebooting!"
-                    break
-                    ;;
-                *)
-                    echo "Please enter Y, Yes, N, or No"
-                    ;;
-            esac
-        done
-    fi
-else
-    warning "> Something went wrong and you probably shouldn't continue... "
-    warning "> Check the wiki for troubleshooting information."
-    warning "> If further help is needed, join OpenFLIXR's Discord Server or post on the forums for assistance"
-fi
+ingo "- Done!"
+setupopenflixr --no-log-submission -f updater
+setupopenflixr --no-log-submission -f mono
+setupopenflixr --no-log-submission -f redis
+setupopenflixr --no-log-submission -f php
+setupopenflixr --no-log-submission -p dns_check
+setupopenflixr --no-log-submission -p ready_check || exit
+setupopenflixr --no-log-submission -p prepare-upgrade
+setupopenflixr --no-log-submission -p upgrade
