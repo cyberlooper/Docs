@@ -54,13 +54,11 @@ fi
 if [[ ! -d "${PRECHECK_DIR}" ]]; then
     mkdir -p "${PRECHECK_DIR}"
 fi
-
-if [[ -f "${PRECHECK_DIR}/precheck.lock" ]]; then
+if { set -C; 2>/dev/null > "${PRECHECK_DIR}/precheck.lock"; }; then
+    trap 'cleanup' 0 1 2 3 6 14 15 INT
+else
     echo "Precheck already running. If this is in error, you may remove the file by running 'rm ${PRECHECK_DIR}/precheck.lock'"
     exit
-else
-    touch "${PRECHECK_DIR}/precheck.lock"
-    trap 'cleanup' 0 1 2 3 6 14 15 INT
 fi
 
 if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
