@@ -123,9 +123,6 @@ info "Fixing setupopenflixr symlink"
 bash /opt/OpenFLIXR2.SetupScript/main.sh -s
 info "Bypassing pi-hole"
 sed -i "s#nameserver .*#nameserver 8.8.8.8#g" "/etc/resolv.conf"
-#if [[ $(grep -c "/etc/resolv.conf" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
-#    echo 'sudo sed -i "s#nameserver .*#nameserver 8.8.8.8#g" "/etc/resolv.conf"' >> "${DETECTED_HOMEDIR}/.bashrc"
-#fi
 info "- Done"
 if [[ $(grep -c "precheck.sh" "${DETECTED_HOMEDIR}/.bashrc") == 0 ]]; then
     info "Adding precheck script to .bashrc to run on boot until this is all done..."
