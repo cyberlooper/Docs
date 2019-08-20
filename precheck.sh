@@ -47,12 +47,18 @@ fi
 
 if [[ -f "${PRECHECK_DIR}/precheck.config" ]]; then
     source "${PRECHECK_DIR}/precheck.config"
+    log "DEV_BRANCH='${DEV_BRANCH:-}'"
+    log "PRECHECK_BRANCH='${PRECHECK_BRANCH:-}'"
+    log "SETUP_BRANCH='${SETUP_BRANCH:-}'"
+    log "DEV_MODE='${DEV_MODE:-}'"
 fi
 
 if [[ ${EUID} -ne 0 ]]; then
     if [[ ${DEV_MODE:-} == "local" && -f "${DETECTED_HOMEDIR}/precheck.sh" ]]; then
+        log "Re-running precheck.sh with sudo"
         exec sudo bash precheck.sh
     else
+        log "Re-running https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh with sudo"
         exec sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/openflixr/Docs/${PRECHECK_BRANCH:-master}/precheck.sh)"
     fi
 fi
